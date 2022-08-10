@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const logger = require('./middleware/logger');
 const morgan = require("morgan"); 
 const colors = require("colors"); 
+const fileupload = require ('express-fileupload')
 const connectDB = require('./config/db')
 const errorHandler = require("./middleware/error")
 
@@ -14,6 +15,7 @@ connectDB()
 
 // Route files
 const bootcampas = require('./routes/bootcamps')
+const courses = require('./routes/courses')
 
 
 const app = express();
@@ -27,8 +29,13 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'))
 }
 
+// file uploading
+
+app.use(fileupload())
+
 // Mount routers
 app.use('/api/v1/bootcamps', bootcampas)
+app.use('/api/v1/courses', courses)
 app.use(errorHandler)
 
 

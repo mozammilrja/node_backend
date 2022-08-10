@@ -9,14 +9,72 @@ const asyncHandler = require("../middleware/async");
 
 exports.getBootcamps = asyncHandler(async (req, res, next) => {
   let query;
+ 
+  // Copy req.query
+  const reqQuery = { ...req.query }
+
+  // Fields to exclude
+  const removeFields = ['select','sort','page', 'limit'];
+
+  // Loop over removeFields and delete them from reqQuery
+  removeFields.forEach(param => delete reqQuery[param])
+
   let queryStr = JSON.stringify(req.query);
 
+  // create operators ($gt, $gte, etc)
   queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`)
-  query = Bootcamp.find(JSON.parse(queryStr));
+
+  // Find resources
+  query = Bootcamp.find(JSON.parse(queryStr)).populate('courses');
+
+  // Select Fields
+  if (req.query.select) {
+    const fields = req.query.select.split(',').join(' ')
+    query = query.select(fields)
+  }
+
+  // sort 
+  if (req.query.sort) {
+    const sortBy = req.query.sort.split(',').join('');
+    query = query.sort(sortBy)
+  } else {
+    query = query.sort('_createdAt')
+  }
+
+  // pagination
+  const page = parseInt (req.query.page, 10) || 1;
+  const limit = parseInt(req.query.page, 10) || 10;
+  const startIndex = (page - 1) * limit;
+  const endIndex = page * limit;
+  const total = await Bootcamp.countDocuments();
+
+  query = query.skip(startIndex).limit(limit);
+
+  // Executing query
   const bootcapms = await query 
+
+  //Pagination result
+
+  const pagination = {};
+
+  if (endIndex < total) {
+    pagination.next = {
+      page: page + 1,
+      limit
+    }
+  }
+
+  if (startIndex > 0) {
+    pagination.prev = {
+      page: page - 1,
+      limit
+    }
+  }
+
+  
   res
     .status(200)
-    .json({ success: true, count: bootcapms.length, data: bootcapms });
+    .json({ success: true, count: bootcapms.length,pagination, data: bootcapms });
 });
 // @desc   get single bootcapms
 // @route  GET  /api/v1/bootcamp/:id
@@ -27,10 +85,8 @@ exports.getBootcamp = asyncHandler(async (req, res, next) => {
 
   if (!bootcamp) {
     return next(
-      new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404)
-    );
-  }
-  res.status(200).json({ success: true, data: bootcamp });
+      new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404));}
+      res.status(200).json({ success: true, data: bootcamp });
 });
 // @desc   Create new bootcapms
 // @route   POST  /api/v1/bootcamp/
@@ -64,13 +120,14 @@ exports.updateBootcamp = asyncHandler(async (req, res, next) => {
 // @access  private
 
 exports.deleteBootcamp = asyncHandler(async (req, res, next) => {
-  const bootcamp = await Bootcamp.findByIdAndDelete(req.params.id);
+  const bootcamp = await Bootcamp.findById(req.params.id);
   if (!bootcamp) {
     return next(
       new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404)
     );
   }
-  res.status(200).json({ success: true, data: bootcamp });
+  bootcamp.remove()
+  res.status(200).json({ success: true, data: {} });
 });
 
 // @desc   Get bootcapms within a radius
@@ -99,4 +156,27 @@ exports.getBootcampInRadius = asyncHandler(async (req, res, next) => {
     count: bootcapms.length,
     data: bootcapms,
   });
+});
+
+
+
+// @desc   upload photo for  bootcapms
+// @route   put  /api/v1/bootcamps/:id/photo
+// @access  private
+
+exports.bootcampPhotoUpload = asyncHandler(async (req, res, next) => {
+  const bootcamp = await Bootcamp.findById(req.params.id);
+  if (!bootcamp) {
+    return next(
+      new ErrorResponse(`Bootcamp not found with id of ${req.params.id}`, 404)
+    );
+  }
+  if (!req.files) {
+    return next(new ErrorResponse(`please upload a file`, 404));
+  }
+  const file = req.files.file;
+  // Make sure the image is a photo
+  if (!file.mimetype.startWidth('image')) {
+        return next(new ErrorResponse(`please upload a image file`, 404));
+  }
 });
